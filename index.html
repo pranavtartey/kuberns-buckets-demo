@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Storage Bucket API</title>
+<style>
+  body { font-family: ui-sans-serif, system-ui, sans-serif; margin: 0; padding: 24px;
+         max-width: 1100px; line-height: 1.5; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em;
+       color: #666; margin: 28px 0 10px; }
+  p.lede { color: #555; margin: 0 0 20px; }
+  .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+            gap: 12px; margin-bottom: 8px; }
+  label { display: block; font-size: 12px; color: #555; margin-bottom: 4px; }
+  input, select, textarea { width: 100%; padding: 7px 9px; font-size: 14px;
+          border: 1px solid #ccc; border-radius: 5px; font-family: inherit; box-sizing: border-box; }
+  textarea { font-family: ui-monospace, Menlo, monospace; font-size: 13px; min-height: 64px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; }
+  button { padding: 8px 13px; font-size: 13px; border: 1px solid #bbb; background: #fafafa;
+           border-radius: 5px; cursor: pointer; font-family: inherit; }
+  button:hover { background: #f0f0f0; }
+  button:disabled { opacity: .5; cursor: progress; }
+  button .m { color: #888; font-weight: 600; margin-right: 6px; font-size: 11px; }
+  pre { background: #f6f6f6; border: 1px solid #e3e3e3; border-radius: 6px;
+        padding: 14px; overflow: auto; font-size: 12.5px; max-height: 460px;
+        white-space: pre-wrap; word-break: break-word; }
+  .status { font-weight: 700; }
+  .ok { color: #1a7f37; } .bad { color: #b42318; }
+  hr { border: 0; border-top: 1px solid #eee; margin: 24px 0 0; }
+</style>
+</head>
+<body>
+
+<h1>Storage Bucket API</h1>
+<p class="lede">
+  Every endpoint, one button each. The credential is held by the little server
+  that serves this page, not by the page — which is where yours belongs too.
+</p>
+
+<div class="fields">
+  <div>
+    <label for="bucket">Bucket</label>
+    <input id="bucket" placeholder="kb-assets-a6d7643303ef">
+  </div>
+  <div>
+    <label for="key">Object key</label>
+    <input id="key" placeholder="photos/logo.png">
+  </div>
+  <div>
+    <label for="name">New bucket name</label>
+    <input id="name" placeholder="product-assets">
+  </div>
+  <div>
+    <label for="folder_path">Folder path</label>
+    <input id="folder_path" placeholder="invoices/2026">
+  </div>
+  <div>
+    <label for="prefix">List prefix</label>
+    <input id="prefix" placeholder="photos/">
+  </div>
+  <div>
+    <label for="token">Next-page token</label>
+    <input id="token" placeholder="from a previous listing">
+  </div>
+  <div>
+    <label for="visibility">Visibility</label>
+    <select id="visibility">
+      <option value="private">private</option>
+      <option value="public">public</option>
+    </select>
+  </div>
+  <div>
+    <label for="file">Upload a file instead of the text</label>
+    <input id="file" type="file">
+  </div>
+</div>
+
+<div>
+  <label for="content">Upload content</label>
+  <textarea id="content">hello from my application</textarea>
+</div>
+
+<h2>Buckets</h2>
+<div class="row">
+  <button data-op="buckets.list"><span class="m">GET</span>List buckets</button>
+  <button data-op="buckets.create"><span class="m">POST</span>Create bucket</button>
+  <button data-op="buckets.detail"><span class="m">GET</span>Bucket detail</button>
+  <button data-op="buckets.delete"><span class="m">DEL</span>Delete bucket</button>
+  <button data-op="folders.create"><span class="m">POST</span>Create folder</button>
+</div>
+
+<h2>Objects</h2>
+<div class="row">
+  <button data-op="objects.list"><span class="m">GET</span>List objects</button>
+  <button data-op="objects.put"><span class="m">PUT</span>Upload</button>
+  <button data-op="objects.get"><span class="m">GET</span>Download</button>
+  <button data-op="objects.head"><span class="m">HEAD</span>Metadata</button>
+  <button data-op="objects.delete"><span class="m">DEL</span>Delete object</button>
+</div>
+
+<h2>Sharing</h2>
+<div class="row">
+  <button data-op="visibility.get"><span class="m">GET</span>Read visibility</button>
+  <button data-op="visibility.set"><span class="m">PUT</span>Set visibility</button>
+  <button data-op="url.get"><span class="m">POST</span>Get a link</button>
+</div>
+
+<h2>Walkthroughs</h2>
+<div class="row">
+  <button data-flow="share">Upload → make public → get link</button>
+  <button data-flow="lifecycle">Upload → overwrite → delete</button>
+  <button data-flow="folder">Create folder → upload into it → list it</button>
+</div>
+
+<hr>
+<h2>Response</h2>
+<pre id="out">Pick a button.</pre>
+
+<script>
+const $ = id => document.getElementById(id);
+const out = $('out');
+
+function params() {
+  return {
+    bucket: $('bucket').value.trim(),
+    key: $('key').value.trim(),
+    name: $('name').value.trim(),
+    folder_path: $('folder_path').value.trim(),
+    prefix: $('prefix').value.trim(),
+    token: $('token').value.trim(),
+    visibility: $('visibility').value,
+    content: $('content').value,
+  };
+}
+
+async function fileAsBase64() {
+  const file = $('file').files[0];
+  if (!file) return null;
+  const buffer = await file.arrayBuffer();
+  let binary = '';
+  new Uint8Array(buffer).forEach(b => binary += String.fromCharCode(b));
+  return { content_b64: btoa(binary), content_type: file.type || 'application/octet-stream' };
+}
+
+async function call(op, extra = {}) {
+  const body = { op, params: { ...params(), ...extra } };
+
+  if (op === 'objects.put') {
+    const picked = await fileAsBase64();
+    if (picked) Object.assign(body.params, picked);
+  }
+
+  const response = await fetch('/call', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return response.json();
+}
+
+function render(results) {
+  out.innerHTML = results.map(r => {
+    const good = r.status >= 200 && r.status < 300;
+    const head = `${r.request.method} ${r.request.url}`;
+    const sent = r.request.body
+      ? `\n\nsent\n${typeof r.request.body === 'string'
+          ? r.request.body : JSON.stringify(r.request.body, null, 2)}` : '';
+    let shown = r.body;
+    try { shown = JSON.stringify(JSON.parse(r.body), null, 2); } catch (e) {}
+    const status = `<span class="status ${good ? 'ok' : 'bad'}">${r.status || 'no response'}</span>`;
+    return `${escape(head)}${escape(sent)}\n\n${status}\n${escape(shown || '(empty body)')}`;
+  }).join('\n\n' + '─'.repeat(60) + '\n\n');
+}
+
+function escape(text) {
+  return String(text).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+}
+
+async function run(fn) {
+  document.querySelectorAll('button').forEach(b => b.disabled = true);
+  out.textContent = 'Calling…';
+  try {
+    render(await fn());
+  } catch (e) {
+    out.textContent = 'The demo server did not answer: ' + e;
+  } finally {
+    document.querySelectorAll('button').forEach(b => b.disabled = false);
+  }
+}
+
+document.querySelectorAll('button[data-op]').forEach(button => {
+  button.addEventListener('click', () => run(async () => [await call(button.dataset.op)]));
+});
+
+// A walkthrough is several calls in the order a real application would make
+// them, so the page shows the sequence rather than one endpoint at a time.
+const flows = {
+  share: async () => [
+    await call('objects.put'),
+    await call('visibility.set', { visibility: 'public' }),
+    await call('url.get'),
+  ],
+  lifecycle: async () => [
+    await call('objects.put'),
+    await call('objects.head'),
+    await call('objects.put', { content: $('content').value + ' — second version' }),
+    await call('objects.head'),
+    await call('objects.delete'),
+    await call('objects.head'),
+  ],
+  folder: async () => {
+    const folder = $('folder_path').value.trim().replace(/\/$/, '');
+    return [
+      await call('folders.create'),
+      await call('objects.put', { key: `${folder}/from-the-demo.txt` }),
+      await call('objects.list', { prefix: folder }),
+    ];
+  },
+};
+
+document.querySelectorAll('button[data-flow]').forEach(button => {
+  button.addEventListener('click', () => run(flows[button.dataset.flow]));
+});
+</script>
+</body>
+</html>
