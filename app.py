@@ -10,7 +10,6 @@ The credential lives here and never reaches the browser. That is not a detail
 of this demo - it is how an application should hold it. Anything you put in
 page JavaScript is readable by whoever opens the page.
 
-    export KB_GATEWAY_URL=https://storage-staging.kuberns.site
     export KB_ACCESS_KEY_ID=...
     export KB_SECRET=...
 
@@ -29,7 +28,14 @@ from flask import Flask, jsonify, request, send_from_directory
 
 app = Flask(__name__, static_folder=None)
 
-GATEWAY = os.environ.get('KB_GATEWAY_URL', '').rstrip('/')
+# The one address every bucket is reached through. It is the same for
+# everybody and it is not a secret, so it belongs here rather than in each
+# application's configuration - the two things that differ per customer are
+# the credential below. Overridable all the same, for pointing at a staging
+# gateway.
+DEFAULT_GATEWAY = 'https://storage-staging.kuberns.site'
+
+GATEWAY = os.environ.get('KB_GATEWAY_URL', DEFAULT_GATEWAY).rstrip('/')
 ACCESS_KEY_ID = os.environ.get('KB_ACCESS_KEY_ID', '')
 SECRET = os.environ.get('KB_SECRET', '')
 
@@ -247,12 +253,12 @@ def healthz():
 
 @app.post('/call')
 def call():
-    if not (GATEWAY and ACCESS_KEY_ID and SECRET):
+    if not (ACCESS_KEY_ID and SECRET):
         return jsonify({
             'request': {'method': '-', 'url': '-', 'body': None},
             'status': 0,
             'headers': {},
-            'body': 'Set KB_GATEWAY_URL, KB_ACCESS_KEY_ID and KB_SECRET, then restart.',
+            'body': 'Set KB_ACCESS_KEY_ID and KB_SECRET, then restart.',
         })
 
     payload = request.get_json(silent=True) or {}

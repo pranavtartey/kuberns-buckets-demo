@@ -13,7 +13,6 @@ The secret is shown once.
 ```bash
 pip install -r requirements.txt
 
-export KB_GATEWAY_URL=https://storage-staging.kuberns.site
 export KB_ACCESS_KEY_ID=kbs...
 export KB_SECRET=...
 
@@ -24,18 +23,21 @@ Open http://localhost:8000.
 
 ## Deploying it on Kuberns
 
-It is a Flask app, so deploy it as one. Set three environment variables and
+It is a Flask app, so deploy it as one. Set two environment variables and
 nothing else:
 
 | Variable | Value |
 |---|---|
-| `KB_GATEWAY_URL` | your storage gateway's address |
 | `KB_ACCESS_KEY_ID` | from Buckets → Credentials |
 | `KB_SECRET` | the secret shown when that credential was created |
 
+Those two are the whole configuration. The gateway's address is the same for
+every account, so it is a default in the code; `KB_GATEWAY_URL` overrides it
+if you need to point somewhere else.
+
 `gunicorn` binds to `$PORT` through the `Procfile`. `GET /healthz` answers
 whether the app is up and whether it has been given a credential, which is
-usually the faster way to find out that one of the three is missing.
+usually the faster way to find out that one of the two is missing.
 
 ## What it covers
 
