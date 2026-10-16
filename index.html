@@ -144,8 +144,43 @@ async function fileAsBase64() {
   return { content_b64: btoa(binary), content_type: file.type || 'application/octet-stream' };
 }
 
+// What each call cannot be made without. Sending it anyway produces a URL
+// like /buckets/ and an answer about methods that has nothing to do with what
+// was actually wrong.
+const REQUIRED = {
+  'buckets.create':  ['name'],
+  'buckets.detail':  ['bucket'],
+  'buckets.delete':  ['bucket'],
+  'folders.create':  ['bucket', 'folder_path'],
+  'visibility.get':  ['bucket', 'key'],
+  'visibility.set':  ['bucket', 'key'],
+  'url.get':         ['bucket', 'key'],
+  'objects.list':    ['bucket'],
+  'objects.put':     ['bucket', 'key'],
+  'objects.get':     ['bucket', 'key'],
+  'objects.head':    ['bucket', 'key'],
+  'objects.delete':  ['bucket', 'key'],
+};
+
+const LABELS = { bucket: 'Bucket', key: 'Object key', name: 'New bucket name',
+                 folder_path: 'Folder path' };
+
+function missingFields(op, values) {
+  return (REQUIRED[op] || []).filter(field => !values[field]).map(f => LABELS[f]);
+}
+
 async function call(op, extra = {}) {
   const body = { op, params: { ...params(), ...extra } };
+
+  const missing = missingFields(op, body.params);
+  if (missing.length) {
+    return {
+      request: { method: '—', url: '—', body: null },
+      status: null,
+      headers: {},
+      body: `Fill in ${missing.join(' and ')} first.`,
+    };
+  }
 
   if (op === 'objects.put') {
     const picked = await fileAsBase64();
@@ -169,6 +204,11 @@ function render(results) {
           ? r.request.body : JSON.stringify(r.request.body, null, 2)}` : '';
     let shown = r.body;
     try { shown = JSON.stringify(JSON.parse(r.body), null, 2); } catch (e) {}
+
+    // Nothing was sent, so there is no status to report - only what is
+    // missing.
+    if (r.status === null) return escape(shown);
+
     const status = `<span class="status ${good ? 'ok' : 'bad'}">${r.status || 'no response'}</span>`;
     return `${escape(head)}${escape(sent)}\n\n${status}\n${escape(shown || '(empty body)')}`;
   }).join('\n\n' + '─'.repeat(60) + '\n\n');
